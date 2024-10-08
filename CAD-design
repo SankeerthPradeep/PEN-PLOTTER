@@ -1,1 +1,31 @@
+# XY Pen Plotter: Mechanical CAD Design
+
+The **XY Pen Plotter** was carefully designed using *Fusion 360*, ensuring both precision and functionality in every aspect of its assembly. The design process focused on creating essential components that optimize the pen plotter's performance, providing structural integrity and mechanical efficiency throughout the system.
+
+Each part of the design is engineered for **accuracy**, **stability**, and **smooth operation**, contributing to the overall success of the pen plotting mechanism. Below is a detailed breakdown of the key components:
+
+### **Pen Holder**
+The pen holder is a **crucial component** designed to securely grip pens of various sizes, allowing for easy adjustments and **uniform pressure** for precise, smooth plotting. Its mechanical design ensures controlled movement, enabling accurate and detailed drawings. Quick pen changes are made possible without compromising the consistency of the output.
+
+### **X-Axis Frame**
+The X-axis frame acts as the horizontal support for the plotter, facilitating smooth **lateral movement** over the plotting surface. It incorporates motor and pulley mounting points to ensure efficient motion transfer, which is essential for **precise plotting** across the horizontal plane.
+
+### **Y-Axis Frame**
+The Y-axis frame provides **vertical movement**, working in tandem with the X-axis to ensure the pen can be positioned accurately across the plotting area. This ensures **consistent pen positioning** for high-quality drawings, no matter the complexity of the design.
+
+### **Base Plate and Structure**
+The base plate serves as the **foundation** for the entire plotter assembly. Built from durable materials, it offers stability and support to all other components. This rigid structure is essential for **accurate and reliable operation**, ensuring the plotter remains steady during use.
+
+### **Pulleys and Bearings**
+The pulleys and bearings are critical to the **smooth movement** of the pen holder assembly. By minimizing friction and reducing vibrations, they play a key role in enhancing the plotter's **accuracy** and **drawing quality**, resulting in clean, precise lines.
+
+### **Motor Holders**
+The motor holders are designed to securely mount the motors on the X and Y frames. These holders ensure that the motors remain **stable and secure**, allowing for consistent and reliable control over the plotter’s movements. This **stability** is vital for maintaining accurate, steady operation during plotting.
+
+---
+
+Each of the standard components, such as the DC geared motors, ESP32 microcontroller board, and Qwiic motor driver, was integrated after ensuring their **exact dimensions** were verified against the physical counterparts to guarantee seamless assembly and functionality.
+
+Feel free to explore the design files and contribute to the continued improvement of the XY Pen Plotter!
+
 
