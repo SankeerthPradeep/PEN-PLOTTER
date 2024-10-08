@@ -1,11 +1,12 @@
+
 # XY Pen Plotter: Mechanical CAD Design
 
 The project, titled **"XY Pen Plotter Design,"** was developed using *Fusion 360* to achieve precision and functionality in every aspect of its assembly. The focus was on creating essential components that optimize the pen plotter’s performance, ensuring structural integrity and mechanical efficiency throughout the system.
 
-> **Note:**  
+> [!NOTE]  
 > The design process emphasized accuracy, stability, and smooth operation, contributing to the overall success of the pen plotting mechanism.
 
-> **Tip:**  
+> [!TIP]  
 > The pen holder is engineered to securely grip various pen sizes, ensuring uniform pressure for precise and smooth plotting, with easy adjustments for quick pen changes.
 
 ## Components Breakdown
@@ -27,21 +28,5 @@ These are critical to the pen holder's smooth movement, minimizing friction and 
 
 ### Motor Holders
 These holders securely mount the motors on the X and Y frames, ensuring stability and consistent control over the plotter’s movements. This stability is vital for maintaining accuracy during plotting.
-
----
-
-> **Important:**  
-> Each standard component, including the DC geared motors, ESP32 microcontroller, and Qwiic motor driver, was integrated after verifying their exact dimensions against physical counterparts for seamless assembly and functionality.
-
-> **Caution:**  
-> The design process prioritized the integration of these components to achieve precise alignment and efficient operation throughout the entire system.
-
-## Additional Resources
-
-1. [Fusion 360 CAD Files](#)
-2. [Motor Integration Guide](#)
-3. [Plotter Assembly Instructions](#)
-4. [ESP32 Microcontroller Setup](#)
-5. [Qwiic Motor Driver Configuration](#)
 
 
