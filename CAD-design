@@ -9,24 +9,24 @@ The project, titled **"XY Pen Plotter Design,"** was developed using *Fusion 360
 > [!TIP]  
 > The pen holder is engineered to securely grip various pen sizes, ensuring uniform pressure for precise and smooth plotting, with easy adjustments for quick pen changes.
 
-**Components Breakdown**
+Components Breakdown
 
-**Pen Holder**
+Pen Holder
 A crucial component designed to securely hold pens of various sizes, ensuring uniform pressure and precise plotting. The design allows for controlled movement, enabling detailed drawings with consistent output. It also supports quick pen changes without compromising on consistency.
 
-### X-Axis Frame
+ X-Axis Frame
 The X-axis frame acts as the horizontal support for the plotter, enabling smooth lateral movement. It includes mounting points for motors and pulleys, ensuring efficient motion transfer for precise plotting across the horizontal plane.
 
-### Y-Axis Frame
+ Y-Axis Frame
 The Y-axis frame facilitates vertical movement, working in coordination with the X-axis to accurately position the pen across the plotting area, ensuring high-quality drawings regardless of the design's complexity.
 
-### Base Plate and Structure
+ Base Plate and Structure
 The base plate serves as the foundation for the entire assembly, built from durable materials to provide stability and support. This rigid structure ensures accurate and reliable operation, keeping the plotter steady during use.
 
-### Pulleys and Bearings
+Pulleys and Bearings
 These are critical to the pen holder's smooth movement, minimizing friction and reducing vibrations, which enhances the plotter’s accuracy and drawing quality, resulting in clean and precise lines.
 
-### Motor Holders
+ Motor Holders
 These holders securely mount the motors on the X and Y frames, ensuring stability and consistent control over the plotter’s movements. This stability is vital for maintaining accuracy during plotting.
 
 
