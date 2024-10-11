@@ -1,100 +1,417 @@
-# Analyze-WindowsDefender.ps1
-# This script checks the status of Windows Defender, including its health, current status, and pending updates.
-# The script will not exit until the user presses "Enter".
+#define BLYNK_TEMPLATE_ID "TMPL4Wjl3qoZd"  //  Blynk Template ID
+#define BLYNK_TEMPLATE_NAME "2D Pen Plotter"  // Blynk Template Name
+#define BLYNK_AUTH_TOKEN "UslvDQIPFRPFxB-FL7AnW9mU7X1FBu_F"  // Blynk Auth Token
 
-# Function to ensure script runs as administrator
-function Ensure-Admin {
-    if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
-        Write-Host "The script needs to be run as an administrator." -ForegroundColor Red
-        Start-Process powershell "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`"" -Verb RunAs
-        Exit
-    }
+#include <Wire.h>
+#include <SCMD.h> // Include the SCMD library
+#include <Adafruit_GFX.h>
+#include <Adafruit_SSD1306.h>
+#include <WiFi.h>
+#include <BlynkSimpleEsp32.h>
+
+// Motor driver setup
+SCMD myMotorDriver;
+
+// Blynk setup
+char auth[] = "UslvDQIPFRPFxB-FL7AnW9mU7X1FBu_F";
+char ssid[] = "Nothing Phone (1)";      // WiFi SSID 
+char pass[] = "11223456";  // WiFi Password 
+
+// OLED display setup
+#define SCREEN_WIDTH 128
+#define SCREEN_HEIGHT 64
+#define OLED_RESET -1
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
+
+// Pin definitions for limit switches and pushbuttons
+#define LEFT_LIMIT_PIN 10    // Left limit switch for X-axis
+#define RIGHT_LIMIT_PIN 3    // Right limit switch for X-axis
+#define TOP_LIMIT_PIN 13     // Top limit switch for Y-axis
+#define BOTTOM_LIMIT_PIN 12  // Bottom limit switch for Y-axis
+#define HOME_PUSHBUTTON_PIN 8 // Physical pushbutton pin for homing
+#define MOVE_PUSHBUTTON_PIN 6 // Physical pushbutton pin for movement
+
+// Green LED Pin definition
+#define GREEN_LED_PIN 33
+
+// Function prototypes
+void moveX(int direction, int speed, int duration);
+void moveY(int direction, int speed, int duration);
+void moveDiagonal(int xDirection, int yDirection, int xSpeed, int ySpeed, int duration);
+void drawHouse();
+void showConnectedMessage();
+void startHomingSequence();
+void stopAllMotors();
+bool checkLimitSwitchesDuringDrawing();
+void handleMovementButtonPress();
+void executeHomingSequence();
+void handlePhysicalButtons();
+void turnOnGreenLED();
+void turnOffGreenLED();
+void blinkGreenLED();
+
+// Variables to store the current motor directions (0 for CW, 1 for CCW)
+int xMotorDirection = 0;  // Initially set to clockwise
+int yMotorDirection = 0;  // Initially set to clockwise
+
+// State variables
+int moveButtonPressCount = 0; // Count the number of movement button presses
+bool moveToHome = false; // Flag to indicate if the home movement sequence should start
+bool drawingInProgress = false;
+bool xHomingComplete = false; // Flag to indicate if X-axis homing is complete
+bool yHomingComplete = false; // Flag to indicate if Y-axis homing is complete
+bool stopped = false; // Flag to indicate if a limit switch was triggered
+
+// Blynk button handlers
+BLYNK_WRITE(V0) { // Start button
+  int state = param.asInt();
+  if (state == 1) {
+    handleMovementButtonPress();
+  }
 }
 
-# Call Ensure-Admin at the start
-Ensure-Admin
-
-function Get-DefenderStatus {
-    Write-Host "`n==== Windows Defender Status ====" -ForegroundColor Cyan
-
-    # Get Windows Defender status
-    $status = Get-MpComputerStatus
-
-    # Check Last Quick Scan and Last Full Scan status
-    $lastQuickScan = if ($status.LastQuickScanEndTime) { $status.LastQuickScanEndTime } else { "No quick scan performed" }
-    $lastFullScan = if ($status.LastFullScanEndTime) { $status.LastFullScanEndTime } else { "No full scan performed" }
-
-    # Display the information in a tabular format
-    $table = @"
-    Status                                       Value
-    -----------------------------------------------------
-    Antivirus Enabled:                          $($status.AntivirusEnabled)
-    Real-Time Protection Enabled:               $($status.RealTimeProtectionEnabled)
-    Antivirus Signature Version:                $($status.AMProductVersion)
-    Last Quick Scan:                            $lastQuickScan
-    Last Full Scan:                             $lastFullScan
-"@
-    Write-Host $table -ForegroundColor Green
+BLYNK_WRITE(V1) { // Emergency stop button
+  int state = param.asInt();
+  if (state == 1) {
+    stopAllMotors();
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.setTextSize(2);
+    display.setTextColor(SSD1306_WHITE);
+    display.print("\n \n EMERGENCY STOP");
+    display.display();
+    Serial.println("Emergency stop activated.");
+    stopped = true; // Set stopped flag
+    drawingInProgress = false; // Stop drawing process
+    turnOffGreenLED(); // Turn off the green LED for emergency stop
+  }
 }
 
-function Check-RegularUpdates {
-    Write-Host "`n==== Checking for Regular Updates ====" -ForegroundColor Cyan
-    
-    # Using a simple check since Get-WindowsUpdate is not available
-    $pendingUpdates = Get-WindowsUpdateLog | Select-String -Pattern "Pending Restart|Pending Install"
+BLYNK_WRITE(V2) { // Home button
+  int state = param.asInt();
+  if (state == 1) {
+    Serial.println("Blynk home button pressed. Starting homing sequence.");
+    startHomingSequence();
+  }
+}
 
-    if ($pendingUpdates) {
-        Write-Host "Pending Updates:" -ForegroundColor Yellow
-        $pendingUpdates | ForEach-Object {
-            Write-Host $_.Line -ForegroundColor Yellow
-        }
+void setup() {
+  // Initialize Serial communication
+  Serial.begin(115200);
+  Wire.begin();
+  
+  // Set up the OLED display
+  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
+    Serial.println(F("SSD1306 allocation failed"));
+    for (;;);
+  }
+
+  // Display the welcome message
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+  display.print("\n  WELCOME   TEAM 22");
+  display.display();
+  
+  // Connect to Blynk
+  Blynk.begin(auth, ssid, pass);
+
+  // Show connected message when connected to Blynk
+  showConnectedMessage();
+
+  // Initialize limit switches and pushbuttons as inputs with internal pull-up resistors
+  pinMode(LEFT_LIMIT_PIN, INPUT_PULLUP);
+  pinMode(RIGHT_LIMIT_PIN, INPUT_PULLUP);
+  pinMode(TOP_LIMIT_PIN, INPUT_PULLUP);
+  pinMode(BOTTOM_LIMIT_PIN, INPUT_PULLUP);
+  pinMode(HOME_PUSHBUTTON_PIN, INPUT_PULLUP);
+  pinMode(MOVE_PUSHBUTTON_PIN, INPUT_PULLUP);
+
+  // Initialize green LED pin as output and set it HIGH initially (OFF state)
+  pinMode(GREEN_LED_PIN, OUTPUT);
+  digitalWrite(GREEN_LED_PIN, HIGH);
+
+  // Set the communication mode and I2C address for motor driver
+  myMotorDriver.settings.commInterface = I2C_MODE;
+  myMotorDriver.settings.I2CAddress = 0x5D; // Default I2C address for Qwiic Motor Driver
+
+  // Initialize the motor driver and wait for it to be ready
+  while (myMotorDriver.begin() != 0xA9) {
+    Serial.println("Motor driver ID mismatch, retrying...");
+    delay(1000);
+  }
+  Serial.println("Motor driver ID matches.");
+
+  // Wait until the motor driver is ready
+  while (myMotorDriver.ready() == false);
+  myMotorDriver.enable();
+  Serial.println("Motor driver enabled.");
+}
+
+void loop() {
+  Blynk.run(); // Run Blynk
+
+  // Check physical buttons for movement or homing
+  handlePhysicalButtons();
+
+  // Homing sequence logic
+  if (moveToHome) {
+    executeHomingSequence();
+  }
+}
+
+// Function to turn on the green LED
+void turnOnGreenLED() {
+  digitalWrite(GREEN_LED_PIN, LOW); // Set LOW to turn on the green LED
+}
+
+// Function to turn off the green LED
+void turnOffGreenLED() {
+  digitalWrite(GREEN_LED_PIN, HIGH); // Set HIGH to turn off the green LED
+}
+
+// Function to blink the green LED while drawing the house
+void blinkGreenLED() {
+  while (drawingInProgress) {
+    turnOnGreenLED();
+    delay(500);
+    turnOffGreenLED();
+    delay(500);
+  }
+}
+
+// Function to handle physical button presses
+void handlePhysicalButtons() {
+  int moveButtonState = digitalRead(MOVE_PUSHBUTTON_PIN);
+  int homeButtonState = digitalRead(HOME_PUSHBUTTON_PIN);
+
+  if (moveButtonState == LOW) {
+    handleMovementButtonPress();
+  }
+
+  if (homeButtonState == LOW) {
+    Serial.println("Physical home button pressed. Starting homing sequence.");
+    startHomingSequence();
+  }
+}
+
+// Function to move the X-axis motor
+void moveX(int direction, int speed, int duration) {
+  myMotorDriver.setDrive(0, direction, speed);
+  for (int i = 0; i < duration / 10; i++) {
+    if (checkLimitSwitchesDuringDrawing()) return; // Stop if limit switch is pressed during drawing
+    delay(10);
+  }
+  myMotorDriver.setDrive(0, direction, 0); // Stop motor after the movement
+}
+
+// Function to move the Y-axis motor
+void moveY(int direction, int speed, int duration) {
+  myMotorDriver.setDrive(1, direction, speed);
+  for (int i = 0; i < duration / 10; i++) {
+    if (checkLimitSwitchesDuringDrawing()) return; // Stop if limit switch is pressed during drawing
+    delay(10);
+  }
+  myMotorDriver.setDrive(1, direction, 0); // Stop motor after the movement
+}
+
+// Function to move diagonally
+void moveDiagonal(int xDirection, int yDirection, int xSpeed, int ySpeed, int duration) {
+  myMotorDriver.setDrive(0, xDirection, xSpeed); // X-axis motor
+  myMotorDriver.setDrive(1, yDirection, ySpeed); // Y-axis motor
+  for (int i = 0; i < duration / 10; i++) {
+    if (checkLimitSwitchesDuringDrawing()) return; // Stop if limit switch is pressed during drawing
+    delay(10);
+  }
+  myMotorDriver.setDrive(0, xDirection, 0);
+  myMotorDriver.setDrive(1, yDirection, 0);
+}
+
+// Function to draw the house
+void drawHouse() {
+  drawingInProgress = true;
+
+  moveY(1, 130, 640); // Move downwards
+  if (stopped) return;
+  delay(500);
+  moveX(1, 255, 900); // Move right
+  if (stopped) return;
+  delay(500);
+  moveY(0, 120, 640); // Move upwards
+  if (stopped) return;
+  delay(500);
+  moveX(0, 255, 900); // Move left
+  if (stopped) return;
+  delay(500);
+  moveDiagonal(1, 1, 255, 100, 940); // Diagonal down-right
+  if (stopped) return;
+  delay(300);
+  moveDiagonal(0, 1, 255, 120, 470); // Diagonal up-right
+  if (stopped) return;
+  moveDiagonal(0, 0, 255, 120, 420); // Peak of the house
+  if (stopped) return;
+  moveDiagonal(1, 0, 255, 90, 930); // Cross-diagonal
+  if (stopped) return;
+  delay(500);
+
+  drawingInProgress = false;
+  
+}
+
+// Function to display "CONNECTED" message when Blynk connects
+void showConnectedMessage() {
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+  display.print("\n CONNECTED");
+  display.display();
+  delay(2000); // Display for 2 seconds
+}
+
+// Function to start the homing sequence
+void startHomingSequence() {
+  moveToHome = true;
+  xHomingComplete = false;
+  yHomingComplete = false;
+  display.clearDisplay();
+  display.setCursor(0, 0);
+  display.setTextSize(2);
+  display.setTextColor(SSD1306_WHITE);
+  display.print("\n\n  HOMING");
+  display.display();
+  turnOnGreenLED(); // Turn on LED 
+}
+
+// Function to execute the homing sequence
+void executeHomingSequence() {
+  if (!xHomingComplete) {
+    int leftLimitState = digitalRead(LEFT_LIMIT_PIN);
+    if (leftLimitState == HIGH) {
+      myMotorDriver.setDrive(0, 0, 150);
+      Serial.println("Moving X-axis left...");
     } else {
-        Write-Host "No pending updates." -ForegroundColor Green
+      myMotorDriver.setDrive(0, 0, 0);
+      Serial.println("Left limit switch triggered. Stopping X-axis motor.");
+      xHomingComplete = true;
     }
+  }
+
+  if (xHomingComplete && !yHomingComplete) {
+    int bottomLimitState = digitalRead(BOTTOM_LIMIT_PIN);
+    if (bottomLimitState == HIGH) {
+      myMotorDriver.setDrive(1, 0, 160);
+      Serial.println("Moving Y-axis down...");
+    } else {
+      myMotorDriver.setDrive(1, 0, 0);
+      Serial.println("Bottom limit switch triggered. Stopping Y-axis motor.");
+      yHomingComplete = true;
+    }
+  }
+
+  if (xHomingComplete && yHomingComplete) {
+    moveToHome = false;
+    Serial.println("Homing sequence complete.");
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.setTextSize(2);
+    display.setTextColor(SSD1306_WHITE);
+    display.print("\n  HOMING     DONE");
+    display.display();
+    turnOffGreenLED(); // Turn off LED after homing
+  }
 }
 
-function Check-DefenderHealth {
-    Write-Host "`n==== Windows Defender Health Check ====" -ForegroundColor Cyan
-
-    $status = Get-MpComputerStatus
-
-    # Check Antivirus Enabled
-    if ($status.AntivirusEnabled) {
-        Write-Host "Antivirus is enabled." -ForegroundColor Green
-    } else {
-        Write-Host "Antivirus is not enabled!" -ForegroundColor Red
-    }
-
-    # Check Real-Time Protection
-    if ($status.RealTimeProtectionEnabled) {
-        Write-Host "Real-Time Protection is enabled." -ForegroundColor Green
-    } else {
-        Write-Host "Real-Time Protection is not enabled!" -ForegroundColor Red
-    }
-
-    # Check if Signature is up to date
-    $lastUpdate = $status.AntivirusSignatureLastUpdated
-
-    if ($lastUpdate -ne $null -and $lastUpdate -ne "") {
-        try {
-            $lastUpdateDate = [datetime]::Parse($lastUpdate)
-            $daysSinceLastUpdate = (Get-Date - $lastUpdateDate).Days
-
-            if ($daysSinceLastUpdate -eq 0) {
-                Write-Host "Antivirus signatures are up to date." -ForegroundColor Green
-            } else {
-                Write-Host "Antivirus signatures are out of date!" -ForegroundColor Red
-            }
-        } catch {
-            # If there's an error parsing the date, we just don't report it
-        }
-    }
+// Function to stop all motors
+void stopAllMotors() {
+  myMotorDriver.setDrive(0, 0, 0); // Stop X-axis motor
+  myMotorDriver.setDrive(1, 0, 0); // Stop Y-axis motor
+  
 }
 
-# Run the functions
-Get-DefenderStatus
-Check-RegularUpdates
-Check-DefenderHealth
+// Function to check if any limit switch is pressed during drawing
+bool checkLimitSwitchesDuringDrawing() {
+  if (drawingInProgress && 
+      (digitalRead(LEFT_LIMIT_PIN) == LOW || digitalRead(RIGHT_LIMIT_PIN) == LOW ||
+       digitalRead(TOP_LIMIT_PIN) == LOW || digitalRead(BOTTOM_LIMIT_PIN) == LOW)) {
+    stopAllMotors();
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.setTextSize(2);
+    display.setTextColor(SSD1306_WHITE);
+    display.print("\n \nUNEXPECTED  STOP");
+    display.display();
+    Serial.println("Unexpected stop: Limit switch triggered during drawing.");
+    stopped = true;
+    drawingInProgress = false; // Stop drawing process
+    return true;
+  }
+  return false;
+}
 
-Write-Host "`nPress 'Enter' to exit the script..." -ForegroundColor Cyan
-Read-Host
+// Function to handle movement button press
+void handleMovementButtonPress() {
+  delay(50); // Debounce delay
+  moveButtonPressCount++;
+  if (moveButtonPressCount == 1) {
+    Serial.println("First press action: Moving to set point.");
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.setTextSize(2);
+    display.setTextColor(SSD1306_WHITE);
+    display.print("\n GOING TO  SET POINT");
+    display.display();
+    turnOnGreenLED(); // Turn on the green LED
+    moveMotorsForDuration();
+  } else if (moveButtonPressCount == 2) {
+    Serial.println("Second press action: Drawing house.");
+    display.clearDisplay();
+    display.setCursor(0, 0);
+    display.setTextSize(2);
+    display.setTextColor(SSD1306_WHITE);
+    display.print("\n  DRAWING   NIKOLAUS   HOUSE");
+    display.display();
+    drawingInProgress = true; // Set flag to indicate drawing is in progress
+    stopped = false; // Reset stopped flag
+    drawHouse(); // Call the function to draw the house
+
+    if (!stopped) {
+      display.clearDisplay();
+      display.setCursor(0, 0);
+      display.setTextSize(2);
+      display.setTextColor(SSD1306_WHITE);
+      display.print("\n \n FINISHED");
+      display.display();
+      Serial.println("Drawing complete. Button state reset.");
+    }
+    drawingInProgress = false; // Reset drawing state
+    moveButtonPressCount = 0; // Reset button press count after drawing
+  }
+}
+
+// Function to move the motors to the set point
+void moveMotorsForDuration() {
+  unsigned long startTime = millis();
+  
+  // Move Y-axis motor first for 200ms
+  myMotorDriver.setDrive(1, 1, 150); // Motor 1 (Y-axis), clockwise, speed 200
+  while (millis() - startTime < 600) {
+    delay(100);
+  }
+  myMotorDriver.setDrive(1, 1, 0); // Stop Y-axis motor after 200ms
+  delay(500);
+  // Update startTime for X-axis movement
+  startTime = millis();
+  
+  // Move X-axis motor next for 300ms
+  myMotorDriver.setDrive(0, 1, 150); // Motor 0 (X-axis), clockwise, speed 255
+  while (millis() - startTime < 400) {
+    delay(10);
+  }
+  myMotorDriver.setDrive(0, 1, 0); // Stop X-axis motor after 300ms
+
+  Serial.println("Motors stopped after timed movement.");
+  turnOffGreenLED(); // Turn off the green LED after movement
+}
+
